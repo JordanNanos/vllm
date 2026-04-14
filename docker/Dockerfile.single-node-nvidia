@@ -1,0 +1,49 @@
+# Single-node NVIDIA benchmark image — overlay the scheduler reconfigure API
+# onto the stock vllm-openai image.  Pure Python changes, no CUDA recompile.
+#
+# Build:
+#   echo "$DOCKER_HUB_PAT" | docker login -u clustermax --password-stdin
+#   docker build -f docker/Dockerfile.single-node-nvidia \
+#     --build-arg BASE_IMAGE=vllm/vllm-openai:v0.18.0 \
+#     -t semianalysiswork/vllm-reconfigure:latest .
+#
+# Push:
+#   docker push semianalysiswork/vllm-reconfigure:latest
+#
+# Run (single-node benchmark):
+#   docker run --rm --init --network host \
+#     --runtime nvidia --gpus all --ipc host --privileged \
+#     --shm-size=16g --ulimit memlock=-1 --ulimit stack=67108864 \
+#     -v $HF_HUB_CACHE:/root/.cache/huggingface \
+#     -v $(pwd):/workspace -w /workspace \
+#     -e HF_TOKEN -e MODEL -e TP -e CONC -e ISL -e OSL -e PORT \
+#     semianalysiswork/vllm-reconfigure:latest \
+#     bash benchmarks/test_reconfigure_sweep.sh
+
+ARG BASE_IMAGE=vllm/vllm-openai:v0.18.0
+FROM ${BASE_IMAGE}
+
+# Stage the changed Python files from the local fork checkout
+COPY vllm/v1/core/sched/interface.py    /tmp/vllm-patch/v1/core/sched/interface.py
+COPY vllm/v1/core/sched/scheduler.py    /tmp/vllm-patch/v1/core/sched/scheduler.py
+COPY vllm/v1/engine/__init__.py         /tmp/vllm-patch/v1/engine/__init__.py
+COPY vllm/v1/engine/core.py             /tmp/vllm-patch/v1/engine/core.py
+COPY vllm/v1/engine/core_client.py      /tmp/vllm-patch/v1/engine/core_client.py
+COPY vllm/v1/engine/async_llm.py        /tmp/vllm-patch/v1/engine/async_llm.py
+COPY vllm/engine/protocol.py            /tmp/vllm-patch/engine/protocol.py
+COPY vllm/entrypoints/serve/rlhf/api_router.py \
+                                        /tmp/vllm-patch/entrypoints/serve/rlhf/api_router.py
+
+# Overlay onto the installed vllm package
+RUN VLLM_DIR=$(python3 -c "import vllm, os; print(os.path.dirname(vllm.__file__))") && \
+    cp /tmp/vllm-patch/v1/core/sched/interface.py    "$VLLM_DIR/v1/core/sched/interface.py" && \
+    cp /tmp/vllm-patch/v1/core/sched/scheduler.py    "$VLLM_DIR/v1/core/sched/scheduler.py" && \
+    cp /tmp/vllm-patch/v1/engine/__init__.py         "$VLLM_DIR/v1/engine/__init__.py" && \
+    cp /tmp/vllm-patch/v1/engine/core.py             "$VLLM_DIR/v1/engine/core.py" && \
+    cp /tmp/vllm-patch/v1/engine/core_client.py      "$VLLM_DIR/v1/engine/core_client.py" && \
+    cp /tmp/vllm-patch/v1/engine/async_llm.py        "$VLLM_DIR/v1/engine/async_llm.py" && \
+    cp /tmp/vllm-patch/engine/protocol.py            "$VLLM_DIR/engine/protocol.py" && \
+    cp /tmp/vllm-patch/entrypoints/serve/rlhf/api_router.py \
+                                                     "$VLLM_DIR/entrypoints/serve/rlhf/api_router.py" && \
+    rm -rf /tmp/vllm-patch && \
+    echo "Reconfigure API overlaid onto $VLLM_DIR"
