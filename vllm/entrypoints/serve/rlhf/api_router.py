@@ -92,6 +92,57 @@ async def resume_generation(raw_request: Request) -> JSONResponse:
         )
 
 
+@router.post("/reconfigure")
+async def reconfigure_scheduler(raw_request: Request) -> JSONResponse:
+    """Reconfigure mutable scheduler limits while fully paused.
+
+    Expects a JSON body with any subset of::
+
+        {
+            "max_num_batched_tokens": int,
+            "max_num_seqs": int,
+            "max_num_scheduled_tokens": int,
+            "enable_chunked_prefill": bool,
+            "long_prefill_token_threshold": int
+        }
+
+    Fields not present are left unchanged.
+    """
+    engine = engine_client(raw_request)
+
+    try:
+        body = await raw_request.json()
+    except json.JSONDecodeError as e:
+        return JSONResponse(
+            content={"error": f"Invalid JSON: {e}"},
+            status_code=HTTPStatus.BAD_REQUEST.value,
+        )
+
+    if not isinstance(body, dict):
+        return JSONResponse(
+            content={"error": "Request body must be a JSON object"},
+            status_code=HTTPStatus.BAD_REQUEST.value,
+        )
+
+    try:
+        await engine.reconfigure_scheduler(**body)
+        return JSONResponse(
+            content={"status": "reconfigured", "params": body},
+            status_code=HTTPStatus.OK.value,
+        )
+    except (ValueError, TypeError) as err:
+        return JSONResponse(
+            content={"error": str(err)},
+            status_code=HTTPStatus.BAD_REQUEST.value,
+        )
+    except Exception as err:
+        logger.exception("Failed to reconfigure scheduler")
+        return JSONResponse(
+            content={"error": f"Failed to reconfigure scheduler: {err}"},
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value,
+        )
+
+
 @router.get("/is_paused")
 async def is_paused(raw_request: Request) -> JSONResponse:
     """Return the current pause status."""

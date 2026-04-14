@@ -25,6 +25,17 @@ from vllm.v1.serial_utils import UtilityResult
 # - "keep": Freeze requests in queue; they resume on resume_generation().
 PauseMode = Literal["abort", "wait", "keep"]
 
+
+@dataclass
+class SchedulerReconfigureRequest:
+    """Mutable scheduler limits that can be changed while fully paused."""
+
+    max_num_batched_tokens: int | None = None
+    max_num_seqs: int | None = None
+    max_num_scheduled_tokens: int | None = None
+    enable_chunked_prefill: bool | None = None
+    long_prefill_token_threshold: int | None = None
+
 # These are possible values of RequestOutput.finish_reason,
 # so form part of the external API.
 FINISH_REASON_STRINGS = ("stop", "length", "abort", "error", "repetition")

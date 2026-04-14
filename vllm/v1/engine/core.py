@@ -59,6 +59,7 @@ from vllm.v1.engine import (
     PauseMode,
     ReconfigureDistributedRequest,
     ReconfigureRankType,
+    SchedulerReconfigureRequest,
     UtilityOutput,
     UtilityResult,
 )
@@ -661,6 +662,10 @@ class EngineCore:
     def resume_scheduler(self) -> None:
         """Resume the scheduler and flush any requests queued while paused."""
         self.scheduler.set_pause_state(PauseState.UNPAUSED)
+
+    def reconfigure_scheduler(self, request: SchedulerReconfigureRequest) -> None:
+        """Apply mutable scheduler limits while generation is fully paused."""
+        self.scheduler.reconfigure(request)
 
     def is_scheduler_paused(self) -> bool:
         """Return whether the scheduler is in any pause state."""

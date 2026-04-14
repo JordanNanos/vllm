@@ -194,6 +194,19 @@ class EngineClient(ABC):
         ...
 
     @abstractmethod
+    async def reconfigure_scheduler(
+        self,
+        *,
+        max_num_batched_tokens: int | None = None,
+        max_num_seqs: int | None = None,
+        max_num_scheduled_tokens: int | None = None,
+        enable_chunked_prefill: bool | None = None,
+        long_prefill_token_threshold: int | None = None,
+    ) -> None:
+        """Reconfigure mutable scheduler parameters while fully paused."""
+        ...
+
+    @abstractmethod
     async def is_paused(self) -> bool:
         """Return whether the engine is currently paused."""
         ...

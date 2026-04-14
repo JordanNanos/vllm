@@ -37,7 +37,7 @@ from vllm.transformers_utils.config import maybe_register_config_serialize_by_va
 from vllm.usage.usage_lib import UsageContext
 from vllm.utils.async_utils import cancel_task_threadsafe
 from vllm.utils.collection_utils import as_list
-from vllm.v1.engine import EngineCoreRequest, PauseMode
+from vllm.v1.engine import EngineCoreRequest, PauseMode, SchedulerReconfigureRequest
 from vllm.v1.engine.core_client import EngineCoreClient
 from vllm.v1.engine.exceptions import EngineDeadError, EngineGenerateError
 from vllm.v1.engine.input_processor import InputProcessor
@@ -763,6 +763,37 @@ class AsyncLLM(EngineClient):
     async def resume_generation(self) -> None:
         """Resume generation after :meth:`pause_generation`."""
         await self.engine_core.resume_scheduler_async()
+
+    async def reconfigure_scheduler(
+        self,
+        *,
+        max_num_batched_tokens: int | None = None,
+        max_num_seqs: int | None = None,
+        max_num_scheduled_tokens: int | None = None,
+        enable_chunked_prefill: bool | None = None,
+        long_prefill_token_threshold: int | None = None,
+    ) -> None:
+        """Reconfigure mutable scheduler limits while fully paused.
+
+        The engine must be paused with ``mode="keep"`` and have no unfinished
+        requests. This API only updates scheduler admission/token limits; it
+        does not resize model-runner buffers or rebuild compilation artifacts.
+
+        Example::
+
+            await engine.pause_generation(mode="keep")
+            await engine.reconfigure_scheduler(
+                max_num_batched_tokens=4096, max_num_seqs=64)
+            await engine.resume_generation()
+        """
+        request = SchedulerReconfigureRequest(
+            max_num_batched_tokens=max_num_batched_tokens,
+            max_num_seqs=max_num_seqs,
+            max_num_scheduled_tokens=max_num_scheduled_tokens,
+            enable_chunked_prefill=enable_chunked_prefill,
+            long_prefill_token_threshold=long_prefill_token_threshold,
+        )
+        await self.engine_core.reconfigure_scheduler_async(request)
 
     async def is_paused(self) -> bool:
         """Return whether the engine is currently paused."""

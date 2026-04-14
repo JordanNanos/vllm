@@ -1,0 +1,33 @@
+# Overlay the scheduler reconfigure API onto a stock vLLM image.
+# Pure Python changes -- no C++/CUDA recompilation.
+#
+# Build:
+#   docker build -f docker/Dockerfile.reconfigure-overlay \
+#     --build-arg BASE_IMAGE=vllm/vllm-openai:v0.15.1 \
+#     -t ghcr.io/semianalysisai/vllm-reconfigure:test1 .
+#
+ARG BASE_IMAGE=vllm/vllm-openai:v0.15.1
+FROM ${BASE_IMAGE}
+
+# Copy the changed files into a staging area
+COPY vllm/v1/core/sched/interface.py    /tmp/vllm-patch/v1/core/sched/interface.py
+COPY vllm/v1/core/sched/scheduler.py    /tmp/vllm-patch/v1/core/sched/scheduler.py
+COPY vllm/v1/engine/__init__.py         /tmp/vllm-patch/v1/engine/__init__.py
+COPY vllm/v1/engine/core.py             /tmp/vllm-patch/v1/engine/core.py
+COPY vllm/v1/engine/core_client.py      /tmp/vllm-patch/v1/engine/core_client.py
+COPY vllm/v1/engine/async_llm.py        /tmp/vllm-patch/v1/engine/async_llm.py
+COPY vllm/engine/protocol.py            /tmp/vllm-patch/engine/protocol.py
+COPY vllm/entrypoints/serve/rlhf/api_router.py /tmp/vllm-patch/entrypoints/serve/rlhf/api_router.py
+
+# Overlay onto the installed vllm package
+RUN VLLM_DIR=$(python3 -c "import vllm, os; print(os.path.dirname(vllm.__file__))") && \
+    cp /tmp/vllm-patch/v1/core/sched/interface.py    "$VLLM_DIR/v1/core/sched/interface.py" && \
+    cp /tmp/vllm-patch/v1/core/sched/scheduler.py    "$VLLM_DIR/v1/core/sched/scheduler.py" && \
+    cp /tmp/vllm-patch/v1/engine/__init__.py         "$VLLM_DIR/v1/engine/__init__.py" && \
+    cp /tmp/vllm-patch/v1/engine/core.py             "$VLLM_DIR/v1/engine/core.py" && \
+    cp /tmp/vllm-patch/v1/engine/core_client.py      "$VLLM_DIR/v1/engine/core_client.py" && \
+    cp /tmp/vllm-patch/v1/engine/async_llm.py        "$VLLM_DIR/v1/engine/async_llm.py" && \
+    cp /tmp/vllm-patch/engine/protocol.py            "$VLLM_DIR/engine/protocol.py" && \
+    cp /tmp/vllm-patch/entrypoints/serve/rlhf/api_router.py "$VLLM_DIR/entrypoints/serve/rlhf/api_router.py" && \
+    rm -rf /tmp/vllm-patch && \
+    echo "Reconfigure API overlaid onto $VLLM_DIR"

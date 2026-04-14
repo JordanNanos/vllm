@@ -41,6 +41,7 @@ from vllm.v1.engine import (
     PauseMode,
     ReconfigureDistributedRequest,
     ReconfigureRankType,
+    SchedulerReconfigureRequest,
     UtilityOutput,
 )
 from vllm.v1.engine.coordinator import DPCoordinator
@@ -1071,6 +1072,11 @@ class AsyncMPClient(MPClient):
 
     async def resume_scheduler_async(self) -> None:
         await self.call_utility_async("resume_scheduler")
+
+    async def reconfigure_scheduler_async(
+        self, request: SchedulerReconfigureRequest
+    ) -> None:
+        await self.call_utility_async("reconfigure_scheduler", request)
 
     async def is_scheduler_paused_async(self) -> bool:
         return await self.call_utility_async("is_scheduler_paused")

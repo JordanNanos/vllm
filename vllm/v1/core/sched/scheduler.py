@@ -51,7 +51,12 @@ from vllm.v1.core.sched.request_queue import (
     create_request_queue,
 )
 from vllm.v1.core.sched.utils import check_stop, remove_all
-from vllm.v1.engine import EngineCoreEventType, EngineCoreOutput, EngineCoreOutputs
+from vllm.v1.engine import (
+    EngineCoreEventType,
+    EngineCoreOutput,
+    EngineCoreOutputs,
+    SchedulerReconfigureRequest,
+)
 from vllm.v1.kv_cache_interface import AttentionSpec, KVCacheConfig
 from vllm.v1.metrics.perf import ModelMetrics, PerfStats
 from vllm.v1.metrics.stats import PrefixCacheStats, SchedulerStats
@@ -1848,6 +1853,71 @@ class Scheduler(SchedulerInterface):
 
     def set_pause_state(self, pause_state: PauseState) -> None:
         self._pause_state = pause_state
+
+    def reconfigure(self, request: SchedulerReconfigureRequest) -> None:
+        if self._pause_state != PauseState.PAUSED_ALL:
+            raise ValueError(
+                "Scheduler reconfiguration requires pause_generation(mode='keep')"
+            )
+        if self.has_unfinished_requests():
+            raise ValueError(
+                "Scheduler reconfiguration requires no unfinished requests"
+            )
+
+        max_num_batched_tokens = request.max_num_batched_tokens
+        max_num_seqs = request.max_num_seqs
+        max_num_scheduled_tokens = request.max_num_scheduled_tokens
+
+        if max_num_batched_tokens is None:
+            max_num_batched_tokens = self.scheduler_config.max_num_batched_tokens
+        if max_num_seqs is None:
+            max_num_seqs = self.scheduler_config.max_num_seqs
+        if max_num_scheduled_tokens is None:
+            max_num_scheduled_tokens = (
+                self.scheduler_config.max_num_scheduled_tokens
+            )
+
+        if max_num_batched_tokens < 1:
+            raise ValueError("max_num_batched_tokens must be at least 1")
+        if max_num_seqs < 1:
+            raise ValueError("max_num_seqs must be at least 1")
+        if max_num_scheduled_tokens is not None and max_num_scheduled_tokens < 1:
+            raise ValueError("max_num_scheduled_tokens must be at least 1")
+        if max_num_batched_tokens < max_num_seqs:
+            raise ValueError(
+                "max_num_batched_tokens must be greater than or equal to max_num_seqs"
+            )
+
+        effective_max_num_scheduled_tokens = (
+            max_num_scheduled_tokens
+            if max_num_scheduled_tokens is not None
+            else max_num_batched_tokens
+        )
+        if effective_max_num_scheduled_tokens > max_num_batched_tokens:
+            raise ValueError(
+                "max_num_scheduled_tokens must be less than or equal to "
+                "max_num_batched_tokens"
+            )
+
+        self.scheduler_config.max_num_batched_tokens = max_num_batched_tokens
+        self.scheduler_config.max_num_seqs = max_num_seqs
+        self.scheduler_config.max_num_scheduled_tokens = max_num_scheduled_tokens
+        self.max_num_running_reqs = max_num_seqs
+        self.max_num_scheduled_tokens = effective_max_num_scheduled_tokens
+
+        if request.enable_chunked_prefill is not None:
+            self.scheduler_config.enable_chunked_prefill = (
+                request.enable_chunked_prefill
+            )
+
+        if request.long_prefill_token_threshold is not None:
+            if request.long_prefill_token_threshold < 0:
+                raise ValueError(
+                    "long_prefill_token_threshold must be non-negative"
+                )
+            self.scheduler_config.long_prefill_token_threshold = (
+                request.long_prefill_token_threshold
+            )
 
     def get_num_unfinished_requests(self) -> int:
         if self._pause_state == PauseState.PAUSED_ALL:

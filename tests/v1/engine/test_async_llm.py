@@ -780,6 +780,7 @@ async def test_pause_abort():
         # Request should be finished (aborted)
         assert final_output is not None
         assert final_output.finished
+
         assert final_output.outputs[0].finish_reason == "abort"
 
         # Also test that new requests are blocked while paused, then resume
@@ -812,6 +813,81 @@ async def test_pause_abort():
         final_output2 = await asyncio.wait_for(gen_task2, timeout=10.0)
         assert request_completed
         assert final_output2.finished
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_scheduler_requires_keep_pause():
+    with ExitStack() as after:
+        with set_default_torch_num_threads(1):
+            engine = AsyncLLM.from_engine_args(TEXT_ENGINE_ARGS)
+        after.callback(engine.shutdown)
+
+        with pytest.raises(ValueError, match="pause_generation"):
+            await engine.reconfigure_scheduler(max_num_batched_tokens=64)
+
+        await engine.pause_generation(mode="abort")
+        with pytest.raises(ValueError, match="pause_generation"):
+            await engine.reconfigure_scheduler(max_num_batched_tokens=64)
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_scheduler_updates_limits():
+    with ExitStack() as after:
+        with set_default_torch_num_threads(1):
+            engine = AsyncLLM.from_engine_args(TEXT_ENGINE_ARGS)
+        after.callback(engine.shutdown)
+
+        await engine.pause_generation(mode="keep")
+        await engine.reconfigure_scheduler(
+            max_num_batched_tokens=64,
+            max_num_seqs=8,
+            max_num_scheduled_tokens=32,
+            enable_chunked_prefill=True,
+            long_prefill_token_threshold=2048,
+        )
+        await engine.resume_generation()
+
+        scheduler_config = engine.vllm_config.scheduler_config
+        assert scheduler_config.max_num_batched_tokens == 64
+        assert scheduler_config.max_num_seqs == 8
+        assert scheduler_config.max_num_scheduled_tokens == 32
+        assert scheduler_config.enable_chunked_prefill is True
+        assert scheduler_config.long_prefill_token_threshold == 2048
+
+        final_output = None
+        async for output in engine.generate(
+            request_id="post-reconfigure",
+            prompt=TEXT_PROMPT,
+            sampling_params=SamplingParams(max_tokens=5),
+        ):
+            final_output = output
+        assert final_output is not None
+        assert final_output.finished
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_scheduler_validates_limits():
+    with ExitStack() as after:
+        with set_default_torch_num_threads(1):
+            engine = AsyncLLM.from_engine_args(TEXT_ENGINE_ARGS)
+        after.callback(engine.shutdown)
+
+        await engine.pause_generation(mode="keep")
+        with pytest.raises(ValueError, match="greater than or equal"):
+            await engine.reconfigure_scheduler(
+                max_num_batched_tokens=4,
+                max_num_seqs=8,
+            )
+        with pytest.raises(ValueError, match="less than or equal"):
+            await engine.reconfigure_scheduler(
+                max_num_batched_tokens=8,
+                max_num_seqs=4,
+                max_num_scheduled_tokens=16,
+            )
+        with pytest.raises(ValueError, match="non-negative"):
+            await engine.reconfigure_scheduler(
+                long_prefill_token_threshold=-1,
+            )
 
 
 @pytest.mark.asyncio

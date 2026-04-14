@@ -3,7 +3,7 @@
 import enum
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from vllm.multimodal import MULTIMODAL_REGISTRY, MultiModalRegistry
 
@@ -194,6 +194,23 @@ class SchedulerInterface(ABC):
 
     @abstractmethod
     def set_pause_state(self, pause_state: PauseState) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def reconfigure(self, request: Any) -> None:
+        """Reconfigure scheduler parameters at runtime.
+
+        The scheduler must be in ``PAUSED_ALL`` state with no unfinished
+        requests.
+
+        Args:
+            request: A ``SchedulerReconfigureRequest`` specifying the
+                parameters to change. ``None`` fields are left unchanged.
+
+        Raises:
+            ValueError: If the scheduler is not fully paused, has
+                unfinished requests, or a value is invalid.
+        """
         raise NotImplementedError
 
     @abstractmethod
