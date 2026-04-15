@@ -10,6 +10,8 @@ ARG BASE_IMAGE=vllm/vllm-openai:v0.15.1
 FROM ${BASE_IMAGE}
 
 # Copy the changed files into a staging area
+COPY vllm/inputs/__init__.py            /tmp/vllm-patch/inputs/__init__.py
+COPY vllm/inputs/engine.py              /tmp/vllm-patch/inputs/engine.py
 COPY vllm/v1/core/sched/interface.py    /tmp/vllm-patch/v1/core/sched/interface.py
 COPY vllm/v1/core/sched/scheduler.py    /tmp/vllm-patch/v1/core/sched/scheduler.py
 COPY vllm/v1/engine/__init__.py         /tmp/vllm-patch/v1/engine/__init__.py
@@ -21,6 +23,8 @@ COPY vllm/entrypoints/serve/rlhf/api_router.py /tmp/vllm-patch/entrypoints/serve
 
 # Overlay onto the installed vllm package
 RUN VLLM_DIR=$(python3 -c "import vllm, os; print(os.path.dirname(vllm.__file__))") && \
+    cp /tmp/vllm-patch/inputs/__init__.py            "$VLLM_DIR/inputs/__init__.py" && \
+    cp /tmp/vllm-patch/inputs/engine.py              "$VLLM_DIR/inputs/engine.py" && \
     cp /tmp/vllm-patch/v1/core/sched/interface.py    "$VLLM_DIR/v1/core/sched/interface.py" && \
     cp /tmp/vllm-patch/v1/core/sched/scheduler.py    "$VLLM_DIR/v1/core/sched/scheduler.py" && \
     cp /tmp/vllm-patch/v1/engine/__init__.py         "$VLLM_DIR/v1/engine/__init__.py" && \
