@@ -4,7 +4,7 @@
 # Build:
 #   echo "$DOCKER_HUB_PAT" | docker login -u clustermax --password-stdin
 #   docker build -f docker/Dockerfile.single-node-nvidia \
-#     --build-arg BASE_IMAGE=vllm/vllm-openai:v0.18.0 \
+#     --build-arg BASE_IMAGE=vllm/vllm-openai:v0.15.1 \
 #     -t semianalysiswork/vllm-reconfigure:latest .
 #
 # Push:
@@ -20,7 +20,7 @@
 #     semianalysiswork/vllm-reconfigure:latest \
 #     bash benchmarks/test_reconfigure_sweep.sh
 
-ARG BASE_IMAGE=vllm/vllm-openai:v0.18.0
+ARG BASE_IMAGE=vllm/vllm-openai:v0.15.1
 FROM ${BASE_IMAGE}
 
 # Stage the changed Python files from the local fork checkout
